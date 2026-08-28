@@ -16,6 +16,7 @@ function buildPath(points: EnergyPoint[], minHour: number, maxHour: number) {
   }).join(' ');
 }
 function buildAreaPath(points: EnergyPoint[], minHour: number, maxHour: number) {
+  if (points.length === 0) return '';
   const linePath = buildPath(points, minHour, maxHour);
   const lastX = toX(points[points.length - 1].hour, minHour, maxHour);
   const firstX = toX(points[0].hour, minHour, maxHour);

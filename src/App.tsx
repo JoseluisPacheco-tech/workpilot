@@ -142,8 +142,9 @@ function Onboarding({ onComplete }) {
     if (step === 1 && inputRef.current) inputRef.current.focus();
   }, [step]);
 
-  const steps = [
-    {
+  const TOTAL_STEPS = 3;
+  const getStep = (i) => [
+    () => ({
       content: (
         <div style={{ textAlign: "center", animation: "scaleIn 0.5s ease" }}>
           <div style={{
@@ -164,9 +165,10 @@ function Onboarding({ onComplete }) {
           </p>
         </div>
       ),
-      cta: "Empezar →"
-    },
-    {
+      cta: "Empezar →",
+      disabled: false
+    }),
+    () => ({
       content: (
         <div style={{ animation: "fadeUp 0.4s ease" }}>
           <p style={{ color: theme.textSub, fontSize: 13, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 24, fontFamily: "Syne" }}>
@@ -196,8 +198,8 @@ function Onboarding({ onComplete }) {
       ),
       cta: "Continuar",
       disabled: !name.trim()
-    },
-    {
+    }),
+    () => ({
       content: (
         <div style={{ animation: "fadeUp 0.4s ease" }}>
           <p style={{ color: theme.textSub, fontSize: 13, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 24, fontFamily: "Syne" }}>
@@ -230,10 +232,10 @@ function Onboarding({ onComplete }) {
       ),
       cta: "Entrar a WorkPilot",
       disabled: false
-    }
-  ];
+    }),
+  ][i]();
 
-  const current = steps[step];
+  const current = getStep(step);
 
   return (
     <div style={{
@@ -273,7 +275,7 @@ function Onboarding({ onComplete }) {
 
         <button
           onClick={() => {
-            if (step < steps.length - 1) setStep(step + 1);
+            if (step < TOTAL_STEPS - 1) setStep(step + 1);
             else onComplete({ name: name.trim() || "Amigo", role });
           }}
           disabled={current.disabled}

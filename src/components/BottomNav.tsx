@@ -1,7 +1,7 @@
-import { Home, Zap, CalendarDays, BarChart2 } from 'lucide-react';
+import { Home, Zap, CalendarDays, BarChart2, type LucideIcon } from 'lucide-react';
 import type { Screen } from '../types';
 interface BottomNavProps { active: Screen; onChange: (screen: Screen) => void; }
-const navItems: { id: Screen; label: string; icon: React.ComponentType<{ size?: number; strokeWidth?: number }> }[] = [
+const navItems: { id: Screen; label: string; icon: LucideIcon }[] = [
   { id: 'hoy', label: 'Hoy', icon: Home },
   { id: 'energia', label: 'Energía', icon: Zap },
   { id: 'agenda', label: 'Agenda', icon: CalendarDays },
