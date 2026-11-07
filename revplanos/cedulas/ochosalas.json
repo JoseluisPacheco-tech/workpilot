@@ -1,0 +1,87 @@
+{
+  "nombre": "Cédula de autoevaluación del inmueble — 8 salas de atención (IMSS)",
+  "nota": "Derivada de Cedula_Evaluacion_Inmueble.xlsx. Los alias se comparan sin acentos ni mayúsculas contra las etiquetas extraídas del plano.",
+  "capacidadM2PorLugar": 0.9,
+  "ponderacion": {
+    "seguridad": 0.45,
+    "salas": 0.20,
+    "usosMultiples": 0.10,
+    "areaJuegos": 0.05,
+    "indispensables": 0.10,
+    "operacion": 0.05,
+    "meci": 0.05
+  },
+  "secciones": {
+    "seguridad": {
+      "titulo": "Requerimientos mínimos de seguridad (cualquier NO es motivo de rechazo)",
+      "espacios": [
+        {"clave": "salidaEmergencia", "nombre": "Salida de emergencia adicional al acceso principal", "alias": ["SALIDA DE EMERGENCIA"]},
+        {"clave": "salasPlantaBaja", "nombre": "Salas de atención en planta baja y máximo planta alta", "alias": [], "manual": true},
+        {"clave": "dosViasDescenso", "nombre": "Dos vías de descenso si hay salas en planta alta", "alias": [], "manual": true},
+        {"clave": "juegosMaxDosFracciones", "nombre": "Área de juegos fraccionada en máximo dos espacios", "alias": [], "manual": true},
+        {"clave": "juegosTrasFiltro", "nombre": "Acceso al área de juegos posterior al mueble filtro", "alias": [], "manual": true},
+        {"clave": "usoExclusivo", "nombre": "Inmueble de uso exclusivo para guardería", "alias": [], "manual": true}
+      ]
+    },
+    "salas": {
+      "titulo": "Salas de atención",
+      "espacios": [
+        {"clave": "lactantesA", "nombre": "Lactantes A", "alias": ["LACTANTES \"A\"", "LACTANTES A"]},
+        {"clave": "lactantesB", "nombre": "Lactantes B", "alias": ["LACTANTES \"B\"", "LACTANTES B"]},
+        {"clave": "lactantesC", "nombre": "Lactantes C", "alias": ["LACTANTES \"C\"", "LACTANTES C"]},
+        {"clave": "maternalA", "nombre": "Maternal A", "alias": ["MATERNAL \"A\"", "MATERNAL A"]},
+        {"clave": "maternalB1", "nombre": "Maternal B1", "alias": ["MATERNAL \"B1\"", "MATERNAL B1"]},
+        {"clave": "maternalB2", "nombre": "Maternal B2", "alias": ["MATERNAL \"B2\"", "MATERNAL B2"]},
+        {"clave": "maternalC1", "nombre": "Maternal C1", "alias": ["MATERNAL \"C1\"", "MATERNAL C1"]},
+        {"clave": "maternalC2", "nombre": "Maternal C2", "alias": ["MATERNAL \"C2\"", "MATERNAL C2"]}
+      ]
+    },
+    "usosMultiples": {
+      "titulo": "Salas de usos múltiples",
+      "espacios": [
+        {"clave": "sumLactantes", "nombre": "S.U.M. de lactantes", "alias": ["S.U.M. LACTANTES", "SUM LACTANTES", "USOS MULTIPLES LACTANTES"]},
+        {"clave": "sumMaternales", "nombre": "S.U.M. de maternales", "alias": ["S.U.M. MATERNALES", "SUM MATERNALES", "USOS MULTIPLES MATERNALES"]}
+      ]
+    },
+    "areaJuegos": {
+      "titulo": "Área de juegos y patio cívico",
+      "espacios": [
+        {"clave": "areaJuegos", "nombre": "Área de juegos", "alias": ["AREA DE JUEGOS", "PATIO DE JUEGOS", "PATIO CIVICO"]}
+      ]
+    },
+    "indispensables": {
+      "titulo": "Espacios indispensables para la operación",
+      "espacios": [
+        {"clave": "recepcionControl", "nombre": "Recepción y control (filtro)", "alias": ["RECEPCION Y CONTROL", "FILTRO"]},
+        {"clave": "sanitarioPublico", "nombre": "Sanitario público / familiar", "alias": ["SANITARIO PUBLICO", "SANITARIO FAMILIAR"]},
+        {"clave": "direccion", "nombre": "Dirección", "alias": ["DIRECCION"]},
+        {"clave": "fomentoSalud", "nombre": "Fomento a la salud", "alias": ["FOMENTO A LA SALUD"]},
+        {"clave": "cocina", "nombre": "Cocina", "alias": ["COCINA"]},
+        {"clave": "laboratorioLeches", "nombre": "Laboratorio de leches", "alias": ["LABORATORIO DE LECHES"]},
+        {"clave": "almacenViveres", "nombre": "Almacén de víveres", "alias": ["ALMACEN DE VIVERES", "ALMACEN DE COCINA"]},
+        {"clave": "controlEsfinteres", "nombre": "Local para control de esfínteres", "alias": ["CONTROL DE ESFINTERES"]},
+        {"clave": "sanitariosInfantes", "nombre": "Sanitarios para niñas y niños", "alias": ["WC NINAS", "WC NINOS", "SANITARIOS DE NINOS"]},
+        {"clave": "pedagogia", "nombre": "Pedagogía", "alias": ["PEDAGOGIA"]}
+      ]
+    },
+    "operacion": {
+      "titulo": "Servicios generales de apoyo",
+      "espacios": [
+        {"clave": "vestidoresPersonal", "nombre": "Baños y vestidores de personal", "alias": ["VESTIDORES DE PERSONAL", "VESTIDORES DEL PERSONAL", "SANITARIOS DE PERSONAL", "BANOS Y VESTIDORES"]},
+        {"clave": "descansoPersonal", "nombre": "Descanso de personal", "alias": ["DESCANSO DE PERSONAL"]},
+        {"clave": "ropaLimpia", "nombre": "Área de ropa limpia", "alias": ["ROPA LIMPIA"]},
+        {"clave": "ropaSucia", "nombre": "Ropa sucia y/o lavandería", "alias": ["ROPA SUCIA", "LAVANDERIA"]},
+        {"clave": "bodega", "nombre": "Bodega general", "alias": ["BODEGA"]},
+        {"clave": "septico", "nombre": "Séptico", "alias": ["SEPTICO"]},
+        {"clave": "patioServicio", "nombre": "Patio de servicio", "alias": ["PATIO DE SERVICIO"]},
+        {"clave": "depositoBasura", "nombre": "Depósito de basura", "alias": ["DEPOSITO DE BASURA"]}
+      ]
+    },
+    "meci": {
+      "titulo": "Transición a modelo MECI",
+      "espacios": [
+        {"clave": "pedagogiaMeci", "nombre": "Pedagogía (MECI)", "alias": ["PEDAGOGIA"]}
+      ]
+    }
+  }
+}
