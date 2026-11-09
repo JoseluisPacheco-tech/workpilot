@@ -1,4 +1,0 @@
-aspose-cad>=25.0
-ezdxf>=1.4
-anthropic>=1.0
-openpyxl>=3.1
