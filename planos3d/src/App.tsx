@@ -1,11 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import Capas from './Capas';
+import Cedula from './Cedula';
 import Editor, { Herramienta, Seleccion } from './Editor';
 import Visor from './Visor';
+import { CATALOGO, SECCIONES, areaLocal } from './cedula';
 import { detectarCuartos } from './cuartos';
 import { Formato, exportarModelo, guardarProyecto } from './exportar';
 import { analizarPlano, iaDisponible } from './ia';
-import { leerDxf, leerImagen, leerPdf, leerProyecto } from './importar';
-import { ALTO, GROSOR, Hueco, Muro, Plano, dist, largo, limitarPos, planoEjemplo, planoVacio } from './modelo';
+import { Dibujo, Opciones, armar, leerCedula, leerDwg, leerDxf, leerImagen, leerPdf, leerProyecto } from './importar';
+import { ALTO, GROSOR, Hueco, Local, Muro, Plano, dist, largo, limitarPos, planoEjemplo, planoVacio } from './modelo';
 
 const CLAVE = 'planos3d';
 
@@ -38,6 +41,7 @@ const HERRAMIENTAS: { id: Herramienta; nombre: string; tecla: string; ayuda: str
   { id: 'muro', nombre: 'Muro', tecla: 'M', ayuda: 'Clic para empezar y clic en cada esquina. Doble clic, Enter o Esc para terminar. Mayus desactiva el angulo recto.' },
   { id: 'puerta', nombre: 'Puerta', tecla: 'P', ayuda: 'Clic sobre un muro para colocar una puerta.' },
   { id: 'ventana', nombre: 'Ventana', tecla: 'N', ayuda: 'Clic sobre un muro para colocar una ventana.' },
+  { id: 'local', nombre: 'Local', tecla: 'L', ayuda: 'Clic dentro de una habitacion para decir que local de la cedula es. Luego elige el tipo en el panel derecho.' },
   { id: 'escala', nombre: 'Escala', tecla: 'E', ayuda: 'Marca dos puntos cuya distancia real conozcas (por ejemplo una cota) y escribe la medida.' },
 ];
 
@@ -70,7 +74,8 @@ export default function App() {
   const { plano, cambiar } = hist;
   const [herramienta, setHerramienta] = useState<Herramienta>('sel');
   const [sel, setSel] = useState<Seleccion>(null);
-  const [modo, setModo] = useState<'ambas' | '2d' | '3d'>('ambas');
+  const [modo, setModo] = useState<'ambas' | '2d' | '3d' | 'cedula'>('ambas');
+  const [dibujo, setDibujo] = useState<{ d: Dibujo; nombre: string } | null>(null);
   const [grosor, setGrosor] = useState(GROSOR);
   const [alto, setAlto] = useState(ALTO);
   const [aviso, setAviso] = useState<{ texto: string; error?: boolean } | null>(null);
@@ -82,7 +87,7 @@ export default function App() {
   const entrada = useRef<HTMLInputElement>(null);
 
   const cuartos = useMemo(() => detectarCuartos(plano.muros), [plano.muros]);
-  const areaTotal = cuartos.reduce((s, c) => s + c.area, 0);
+  const areaTotal = cuartos.reduce((s, c) => s + c.util, 0);
 
   useEffect(() => { iaDisponible().then(setConIa); }, []);
 
@@ -92,7 +97,7 @@ export default function App() {
       try {
         localStorage.setItem(CLAVE, JSON.stringify({ version: 1, plano }));
       } catch {
-        try { localStorage.setItem(CLAVE, JSON.stringify({ version: 1, plano: { ...plano, fondo: null } })); } catch { /* sin espacio */ }
+        try { localStorage.setItem(CLAVE, JSON.stringify({ version: 1, plano: { ...plano, fondo: null, calco: [] } })); } catch { /* sin espacio */ }
       }
     }, 600);
     return () => clearTimeout(t);
@@ -110,17 +115,19 @@ export default function App() {
         setAviso({ texto: 'Plano cargado como fondo. Ajusta la escala con dos puntos de medida conocida, y luego usa la IA o traza los muros encima.' });
         setHerramienta('escala');
       } else if (ext === 'pdf') {
+        // Un PDF puede ser el plano o la cedula que se quiere verificar.
+        const cedula = await leerCedula(archivo).catch(() => null);
+        if (cedula) {
+          aplicarCedula(cedula);
+          return;
+        }
         const { fondo, paginas } = await leerPdf(archivo);
         cambiar({ ...plano, fondo });
         setAviso({ texto: `PDF cargado${paginas > 1 ? ` (se usa la pagina 1 de ${paginas})` : ''}. Ajusta la escala y luego usa la IA o traza los muros encima.` });
         setHerramienta('escala');
-      } else if (ext === 'dxf') {
-        const { muros, nota } = leerDxf(await archivo.text());
-        cambiar({ muros, huecos: [], fondo: null });
-        setAviso({ texto: `DXF convertido: ${muros.length} muros (${nota}). Agrega puertas y ventanas con las herramientas.` });
-        setHerramienta('sel');
-      } else if (ext === 'dwg') {
-        throw new Error('El formato DWG es cerrado y no se puede leer directo. En AutoCAD usa "Guardar como" y elige DXF, o conviertelo con ODA File Converter (gratuito).');
+      } else if (ext === 'dxf' || ext === 'dwg') {
+        setDibujo({ d: ext === 'dxf' ? leerDxf(await archivo.text()) : await leerDwg(archivo), nombre: archivo.name });
+        return;
       } else if (ext === 'json') {
         cambiar(leerProyecto(await archivo.text()));
       } else {
@@ -133,6 +140,40 @@ export default function App() {
     } finally {
       setOcupado('');
     }
+  };
+
+  const aplicarCedula = (c: Awaited<ReturnType<typeof leerCedula>>) => {
+    cambiar({
+      ...plano,
+      cedula: { declarado: c.declarado, respuestas: { ...plano.cedula.respuestas, ...c.respuestas } },
+      // Los locales ya marcados toman nivel, capacidad y ambiente de la cedula.
+      locales: plano.locales.map((l) => ({
+        ...l,
+        nivel: c.niveles[l.clave] ?? l.nivel,
+        capacidad: c.declarado['cap:' + l.clave] ?? l.capacidad,
+        vent: c.ambiente[l.clave]?.vent ?? l.vent,
+        ilum: c.ambiente[l.clave]?.ilum ?? l.ilum,
+      })),
+    });
+    setModo('cedula');
+    setTimeout(encuadrar, 50);
+    setAviso({ texto: `Cedula cargada: ${Object.keys(c.declarado).filter((k) => k.startsWith('area:')).length} locales declarados. Revisa las diferencias contra el plano.` });
+  };
+
+  const usarCapas = (op: Opciones) => {
+    if (!dibujo) return;
+    try {
+      const { plano: nuevo, nota } = armar(dibujo.d, op);
+      cambiar({ ...nuevo, cedula: plano.cedula });
+      setAviso({ texto: `${dibujo.nombre}: ${nota}.` });
+      setHerramienta('sel');
+      setSel(null);
+      if (nuevo.locales.length) setModo('cedula');
+      setTimeout(encuadrar, 50);
+    } catch (e) {
+      setAviso({ texto: e instanceof Error ? e.message : 'No se pudo convertir el archivo.', error: true });
+    }
+    setDibujo(null);
   };
 
   const analizar = async () => {
@@ -169,7 +210,7 @@ export default function App() {
 
   useEffect(() => {
     const tecla = (e: KeyboardEvent) => {
-      if (e.target instanceof HTMLInputElement) return;
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement) return;
       const k = e.key.toLowerCase();
       if ((e.ctrlKey || e.metaKey) && k === 'z') { e.preventDefault(); e.shiftKey ? hist.rehacer() : hist.deshacer(); return; }
       if ((e.ctrlKey || e.metaKey) && k === 'y') { e.preventDefault(); hist.rehacer(); return; }
@@ -183,6 +224,9 @@ export default function App() {
 
   const muroSel = sel?.tipo === 'muro' ? plano.muros.find((m) => m.id === sel.id) : undefined;
   const huecoSel = sel?.tipo === 'hueco' ? plano.huecos.find((h) => h.id === sel.id) : undefined;
+  const localSel = sel?.tipo === 'local' ? plano.locales.find((l) => l.id === sel.id) : undefined;
+  const editarLocal = (id: string, cambios: Partial<Local>) =>
+    cambiar({ ...plano, locales: plano.locales.map((l) => (l.id === id ? { ...l, ...cambios } : l)) });
   const muroDelHueco = huecoSel && plano.muros.find((m) => m.id === huecoSel.muro);
 
   const editarMuro = (id: string, cambios: Partial<Muro>) =>
@@ -213,11 +257,13 @@ export default function App() {
     if (!sel) return;
     cambiar(sel.tipo === 'muro'
       ? { ...plano, muros: plano.muros.filter((m) => m.id !== sel.id), huecos: plano.huecos.filter((h) => h.muro !== sel.id) }
-      : { ...plano, huecos: plano.huecos.filter((h) => h.id !== sel.id) });
+      : sel.tipo === 'hueco'
+        ? { ...plano, huecos: plano.huecos.filter((h) => h.id !== sel.id) }
+        : { ...plano, locales: plano.locales.filter((l) => l.id !== sel.id) });
     setSel(null);
   };
 
-  const vacio = !plano.muros.length && !plano.fondo;
+  const vacio = !plano.muros.length && !plano.fondo && !plano.locales.length && !plano.calco.length;
 
   return (
     <div
@@ -243,9 +289,9 @@ export default function App() {
         <button onClick={hist.rehacer} disabled={!hist.hayFuturo} title="Ctrl+Y">Rehacer</button>
         <span className="sep" />
         <div className="grupo">
-          {(['2d', 'ambas', '3d'] as const).map((m) => (
+          {(['2d', 'ambas', '3d', 'cedula'] as const).map((m) => (
             <button key={m} className={modo === m ? 'activo' : ''} onClick={() => { setModo(m); setTimeout(encuadrar, 50); }}>
-              {m === 'ambas' ? '2D + 3D' : m.toUpperCase()}
+              {m === 'ambas' ? '2D + 3D' : m === 'cedula' ? 'Cedula' : m.toUpperCase()}
             </button>
           ))}
         </div>
@@ -279,7 +325,7 @@ export default function App() {
           ))}
         </nav>
 
-        <main className={'vistas ' + modo}>
+        <main className={'vistas ' + (modo === 'cedula' ? 'ambas' : modo)}>
           {modo !== '3d' && (
             <section>
               <Editor
@@ -290,7 +336,7 @@ export default function App() {
               {vacio && herramienta === 'sel' && (
                 <div className="bienvenida">
                   <h2>Convierte un plano en un modelo 3D</h2>
-                  <p>Arrastra aqui tu plano (JPG, PNG, PDF o DXF) o abrelo con el boton. Tambien puedes dibujar los muros desde cero con la herramienta Muro.</p>
+                  <p>Arrastra aqui tu plano (JPG, PNG, PDF, DXF o DWG) o abrelo con el boton. Tambien puedes dibujar los muros desde cero con la herramienta Muro.</p>
                   <div>
                     <button className="primario" onClick={() => entrada.current?.click()}>Abrir plano</button>
                     <button onClick={() => { cambiar(planoEjemplo()); setTimeout(encuadrar, 50); }}>Ver un ejemplo</button>
@@ -299,7 +345,15 @@ export default function App() {
               )}
             </section>
           )}
-          {modo !== '2d' && (
+          {modo === 'cedula' && (
+            <section>
+              <Cedula
+                plano={plano} cuartos={cuartos} sel={sel} setSel={setSel} cambiar={cambiar}
+                cargar={(a) => leerCedula(a).then(aplicarCedula).catch((e) => setAviso({ texto: e instanceof Error ? e.message : 'No se pudo leer la cedula.', error: true }))}
+              />
+            </section>
+          )}
+          {(modo === '3d' || modo === 'ambas') && (
             <section>
               <Visor plano={plano} cuartos={cuartos} encuadre={encuadre3d} />
             </section>
@@ -327,7 +381,52 @@ export default function App() {
               <button className="peligro" onClick={borrar}>Borrar {huecoSel.tipo}</button>
             </div>
           )}
-          {!muroSel && !huecoSel && (
+          {localSel && (
+            <div className="bloque">
+              <h3>Local de la cedula</h3>
+              <select value={localSel.clave} onChange={(e) => editarLocal(localSel.id, { clave: e.target.value })}>
+                <option value="">Sin asignar</option>
+                {SECCIONES.map((s) => (
+                  <optgroup key={s.id} label={s.titulo}>
+                    {CATALOGO.filter((c) => c.seccion === s.id).map((c) => <option key={c.clave} value={c.clave}>{c.nombre}</option>)}
+                  </optgroup>
+                ))}
+              </select>
+              <p className="nota">Area util: <b>{areaLocal(localSel, cuartos).toFixed(2)} m²</b>{localSel.poligono ? ' (poligono del archivo CAD)' : ''}</p>
+              <label className="campo"><span>Nivel</span>
+                <select value={localSel.nivel} onChange={(e) => editarLocal(localSel.id, { nivel: e.target.value as Local['nivel'] })}>
+                  <option value="PB">Planta baja</option><option value="PA">Planta alta</option>
+                </select>
+              </label>
+              {CATALOGO.find((c) => c.clave === localSel.clave)?.max && (
+                <label className="campo"><span>Capacidad</span>
+                  <input
+                    key={localSel.id} defaultValue={localSel.capacidad ?? ''} inputMode="numeric"
+                    onBlur={(e) => editarLocal(localSel.id, { capacidad: parseInt(e.target.value) || undefined })}
+                  />
+                </label>
+              )}
+              <label className="campo"><span>Ventilacion</span>
+                <select value={localSel.vent ?? ''} onChange={(e) => editarLocal(localSel.id, { vent: e.target.value || undefined })}>
+                  <option value="">—</option><option>NATURAL</option><option>MECANICA</option><option>NO TIENE</option>
+                </select>
+              </label>
+              <label className="campo"><span>Iluminacion</span>
+                <select value={localSel.ilum ?? ''} onChange={(e) => editarLocal(localSel.id, { ilum: e.target.value || undefined })}>
+                  <option value="">—</option><option>NATURAL</option><option>ARTIFICIAL</option><option>NO TIENE</option>
+                </select>
+              </label>
+              <label className="campo"><span>Vano de puerta</span>
+                <input
+                  key={localSel.id + 'v'} defaultValue={localSel.vano ?? ''} placeholder="medido" inputMode="decimal"
+                  onBlur={(e) => editarLocal(localSel.id, { vano: parseFloat(e.target.value.replace(',', '.')) || undefined })}
+                />
+                <em>m</em>
+              </label>
+              <button className="peligro" onClick={borrar}>Borrar local</button>
+            </div>
+          )}
+          {!muroSel && !huecoSel && !localSel && (
             <div className="bloque">
               <h3>Muros nuevos</h3>
               <Num nombre="Grosor" valor={grosor} min={0.03} max={1} onCambio={setGrosor} />
@@ -366,10 +465,13 @@ export default function App() {
             <p><span>Puertas</span><b>{plano.huecos.filter((h) => h.tipo === 'puerta').length}</b></p>
             <p><span>Ventanas</span><b>{plano.huecos.filter((h) => h.tipo === 'ventana').length}</b></p>
             <p><span>Habitaciones</span><b>{cuartos.length}</b></p>
-            <p><span>Area interior</span><b>{areaTotal.toFixed(1)} m²</b></p>
+            <p><span>Locales</span><b>{plano.locales.length}</b></p>
+            <p><span>Area util</span><b>{areaTotal.toFixed(1)} m²</b></p>
           </div>
         </aside>
       </div>
+
+      {dibujo && <Capas dibujo={dibujo.d} nombre={dibujo.nombre} usar={usarCapas} cerrar={() => setDibujo(null)} />}
 
       <footer className={'estado' + (aviso?.error ? ' error' : '')}>
         {ocupado ? <><i className="giro" />{ocupado}</> : aviso?.texto ?? HERRAMIENTAS.find((h) => h.id === herramienta)!.ayuda}

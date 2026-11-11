@@ -1,12 +1,13 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { areaLocal, entrada } from './cedula';
 import { Cuarto } from './cuartos';
 import {
-  Hueco, Muro, Plano, Punto, TipoHueco, dist, escalar, largo, limitarPos, limites, nuevoHueco, nuevoId,
+  Hueco, Muro, Plano, Punto, TipoHueco, areaPoligono, dentroDe, dist, escalar, largo, limitarPos, limites, nuevoHueco, nuevoId,
   proyectar, tramoHueco,
 } from './modelo';
 
-export type Herramienta = 'sel' | 'muro' | 'puerta' | 'ventana' | 'escala';
-export type Seleccion = { tipo: 'muro' | 'hueco'; id: string } | null;
+export type Herramienta = 'sel' | 'muro' | 'puerta' | 'ventana' | 'local' | 'escala';
+export type Seleccion = { tipo: 'muro' | 'hueco' | 'local'; id: string } | null;
 
 type Props = {
   plano: Plano;
@@ -100,7 +101,8 @@ export default function Editor(props: Props) {
             muros: plano.muros.filter((m) => m.id !== sel.id),
             huecos: plano.huecos.filter((h) => h.muro !== sel.id),
           });
-        } else cambiar({ ...plano, huecos: plano.huecos.filter((h) => h.id !== sel.id) });
+        } else if (sel.tipo === 'hueco') cambiar({ ...plano, huecos: plano.huecos.filter((h) => h.id !== sel.id) });
+        else cambiar({ ...plano, locales: plano.locales.filter((l) => l.id !== sel.id) });
         setSel(null);
       }
     };
@@ -161,6 +163,16 @@ export default function Editor(props: Props) {
     return null;
   };
 
+  // Local que contiene al punto: el de contorno propio mas chico, o el de la habitacion.
+  const localEn = (p: Punto) => {
+    const propios = plano.locales
+      .filter((l) => l.poligono && dentroDe(p, l.poligono))
+      .sort((a, b) => Math.abs(areaPoligono(a.poligono!)) - Math.abs(areaPoligono(b.poligono!)));
+    if (propios.length) return propios[0];
+    const cuarto = cuartos.find((c) => dentroDe(p, c.puntos));
+    return cuarto ? plano.locales.find((l) => !l.poligono && dentroDe(l.punto, cuarto.puntos)) ?? null : null;
+  };
+
   const alBajar = (e: React.PointerEvent) => {
     svg.current!.setPointerCapture(e.pointerId);
     const p = aMundo(e);
@@ -195,6 +207,16 @@ export default function Editor(props: Props) {
       return;
     }
 
+    if (herramienta === 'local') {
+      const ya = localEn(p);
+      if (ya) return setSel({ tipo: 'local', id: ya.id });
+      if (!cuartos.some((c) => dentroDe(p, c.puntos))) return mover();
+      const nuevo = { id: nuevoId(), clave: '', nivel: 'PB' as const, punto: p };
+      cambiar({ ...plano, locales: [...plano.locales, nuevo] });
+      setSel({ tipo: 'local', id: nuevo.id });
+      return;
+    }
+
     if (herramienta === 'escala') {
       if (medida.length >= 2) return;
       const q = imantar(p, null, true);
@@ -226,9 +248,13 @@ export default function Editor(props: Props) {
       arrastre.current = { tipo: 'hueco', id: h.id, marcado: false };
       return;
     }
+    const rotulo = plano.locales.find((l) => dist(p, l.punto) < px(16));
+    if (rotulo) return setSel({ tipo: 'local', id: rotulo.id });
     const cerca = muroCerca(p, px(8));
     if (cerca) return setSel({ tipo: 'muro', id: cerca.m.id });
-    setSel(null);
+    const local = localEn(p);
+    if (local) setSel({ tipo: 'local', id: local.id });
+    else setSel(null);
     mover();
   };
 
@@ -284,6 +310,12 @@ export default function Editor(props: Props) {
   };
 
   const muroDe = (h: Hueco) => plano.muros.find((m) => m.id === h.muro);
+  const calco = useMemo(() => {
+    const c = plano.calco;
+    let d = '';
+    for (let i = 0; i + 3 < c.length; i += 4) d += `M${c[i]} ${c[i + 1]}L${c[i + 2]} ${c[i + 3]}`;
+    return d;
+  }, [plano.calco]);
   const f = plano.fondo;
   const previo = herramienta === 'puerta' || herramienta === 'ventana' ? cursor && muroCerca(cursor.p, px(16)) : null;
 
@@ -308,12 +340,22 @@ export default function Editor(props: Props) {
           <rect x={vista.cx - px(tam.w)} y={vista.cy - px(tam.h)} width={px(tam.w) * 2} height={px(tam.h) * 2} fill="url(#malla)" />
           {f && <image href={f.src} x={0} y={0} width={f.w / f.ppm} height={f.h / f.ppm} opacity={f.opacidad} preserveAspectRatio="none" />}
 
+          {calco && <path d={calco} fill="none" stroke="#465066" strokeWidth={px(1)} />}
+
+          {plano.locales.filter((l) => l.poligono).map((l) => (
+            <polygon
+              key={l.id} points={l.poligono!.map((p) => `${p.x},${p.y}`).join(' ')}
+              fill={sel?.id === l.id ? C.sel : l.clave ? '#34c97b' : '#f5a623'} fillOpacity={sel?.id === l.id ? 0.25 : 0.1}
+              stroke={sel?.id === l.id ? C.sel : l.clave ? '#34c97b' : '#f5a623'} strokeWidth={px(1.2)}
+            />
+          ))}
+
           {cuartos.map((c, i) => (
             <g key={i}>
               <polygon points={c.puntos.map((p) => `${p.x},${p.y}`).join(' ')} fill="#5b8af5" opacity={0.08} />
-              {Math.sqrt(c.area) * vista.zoom > 60 && (
+              {Math.sqrt(c.area) * vista.zoom > 60 && !plano.locales.some((l) => dentroDe(l.punto, c.puntos)) && (
                 <text x={c.centro.x} y={c.centro.y} fontSize={px(12)} className="rotulo area">
-                  {c.area.toFixed(1)} m²
+                  {c.util.toFixed(1)} m²
                 </text>
               )}
             </g>
@@ -360,6 +402,21 @@ export default function Editor(props: Props) {
                 fontSize={px(10.5)} className="rotulo" stroke={C.fondo} strokeWidth={px(3)} paintOrder="stroke"
               >
                 {L.toFixed(2)}
+              </text>
+            );
+          })}
+
+          {plano.locales.map((l) => {
+            const area = areaLocal(l, cuartos);
+            const activo = sel?.id === l.id;
+            const color = activo ? '#fff' : l.clave ? '#7be0a8' : '#f5a623';
+            if (Math.sqrt(area) * vista.zoom < 46 && !activo) {
+              return <circle key={l.id} cx={l.punto.x} cy={l.punto.y} r={px(3)} fill={color} />;
+            }
+            return (
+              <text key={l.id} x={l.punto.x} y={l.punto.y} fontSize={px(11)} className="rotulo local" style={{ fill: color }} stroke={C.fondo} strokeWidth={px(3)} paintOrder="stroke">
+                <tspan x={l.punto.x} dy={px(-6)}>{entrada(l.clave)?.nombre ?? 'Sin asignar'}</tspan>
+                <tspan x={l.punto.x} dy={px(13)}>{area.toFixed(2)} m²</tspan>
               </text>
             );
           })}

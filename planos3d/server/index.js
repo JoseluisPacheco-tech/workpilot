@@ -20,6 +20,7 @@ const Lectura = z.object({
   escala: z
     .object({ x1: z.number(), y1: z.number(), x2: z.number(), y2: z.number(), metros: z.number() })
     .nullable(),
+  locales: z.array(z.object({ nombre: z.string(), x: z.number(), y: z.number() })),
   notas: z.string(),
 });
 
@@ -41,6 +42,10 @@ Huecos:
 Escala:
 - Si hay una cota legible, o una escala grafica, da los dos extremos de esa medida (x1, y1, x2, y2) y su valor real en metros. Elige la cota mas larga que leas con seguridad.
 - Si no hay ninguna medida legible, devuelve escala como null. No inventes medidas.
+
+Locales:
+- Por cada local con rotulo legible (por ejemplo LACTANTES A, MATERNAL B1, COCINA, DIRECCION, USOS MULTIPLES, BODEGA) da su nombre tal como esta escrito, uniendo los renglones del mismo rotulo, y un punto (x, y) claramente dentro del local.
+- No incluyas titulos de lamina, cotas, ejes ni notas.
 
 Notas: una o dos frases en espanol con lo que no pudiste leer bien o lo que conviene revisar a mano.
 
@@ -74,7 +79,7 @@ app.post('/api/analizar', async (req, res) => {
           role: 'user',
           content: [
             { type: 'image', source: { type: 'base64', media_type: partes[1], data: partes[2] } },
-            { type: 'text', text: 'Extrae los muros, puertas, ventanas y la escala de este plano.' },
+            { type: 'text', text: 'Extrae los muros, puertas, ventanas, locales y la escala de este plano.' },
           ],
         },
       ],

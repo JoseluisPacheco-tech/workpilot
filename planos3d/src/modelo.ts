@@ -29,12 +29,47 @@ export type Fondo = {
   calibrado: boolean;
 };
 
-export type Plano = { muros: Muro[]; huecos: Hueco[]; fondo: Fondo | null };
+export type Nivel = 'PB' | 'PA';
+
+// Un local de la cedula. Si trae poligono, su area util se mide de ahi (asi
+// llegan los poligonos de areas de un DWG); si no, se mide la habitacion que
+// contiene al punto.
+export type Local = {
+  id: string;
+  clave: string;
+  nivel: Nivel;
+  punto: Punto;
+  poligono?: Punto[];
+  capacidad?: number;
+  vent?: string;
+  ilum?: string;
+  vano?: number;
+};
+
+// Datos capturados a mano o leidos de la cedula que se quiere verificar.
+export type DatosCedula = {
+  respuestas: Record<string, string>;
+  declarado: Record<string, number>;
+};
+
+// calco: lineas de referencia del archivo CAD (x1, y1, x2, y2 seguidos).
+export type Plano = {
+  muros: Muro[];
+  huecos: Hueco[];
+  fondo: Fondo | null;
+  locales: Local[];
+  calco: number[];
+  cedula: DatosCedula;
+};
 
 export const ALTO = 2.6;
 export const GROSOR = 0.15;
 
-export const planoVacio = (): Plano => ({ muros: [], huecos: [], fondo: null });
+export const cedulaVacia = (): DatosCedula => ({ respuestas: {}, declarado: {} });
+
+export const planoVacio = (): Plano => ({
+  muros: [], huecos: [], fondo: null, locales: [], calco: [], cedula: cedulaVacia(),
+});
 
 export const nuevoId = () => Math.random().toString(36).slice(2, 10);
 
@@ -81,13 +116,12 @@ export function tramoHueco(h: Hueco, m: Muro) {
 
 // Multiplica todas las coordenadas por f (se usa al calibrar la escala).
 export function escalar(plano: Plano, f: number): Plano {
+  const pt = (p: Punto) => ({ x: p.x * f, y: p.y * f });
   return {
-    muros: plano.muros.map((m) => ({
-      ...m,
-      a: { x: m.a.x * f, y: m.a.y * f },
-      b: { x: m.b.x * f, y: m.b.y * f },
-    })),
-    huecos: plano.huecos,
+    ...plano,
+    muros: plano.muros.map((m) => ({ ...m, a: pt(m.a), b: pt(m.b) })),
+    locales: plano.locales.map((l) => ({ ...l, punto: pt(l.punto), poligono: l.poligono?.map(pt) })),
+    calco: plano.calco.map((v) => v * f),
     fondo: plano.fondo ? { ...plano.fondo, ppm: plano.fondo.ppm / f, calibrado: true } : null,
   };
 }
@@ -98,6 +132,8 @@ export function limites(plano: Plano) {
     x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y);
   };
   for (const m of plano.muros) { ver(m.a.x, m.a.y); ver(m.b.x, m.b.y); }
+  for (const l of plano.locales) for (const p of l.poligono ?? [l.punto]) ver(p.x, p.y);
+  for (let i = 0; i < plano.calco.length; i += 2) ver(plano.calco[i], plano.calco[i + 1]);
   if (plano.fondo) { ver(0, 0); ver(plano.fondo.w / plano.fondo.ppm, plano.fondo.h / plano.fondo.ppm); }
   if (x0 === Infinity) return { x0: 0, y0: 0, x1: 10, y1: 8 };
   return { x0, y0, x1, y1 };
@@ -179,5 +215,42 @@ export const planoEjemplo = (): Plano => {
       h(5, 'puerta', 0.3), h(6, 'puerta', 0.5), h(3, 'ventana', 0.22, 0.8),
     ],
     fondo: null,
+    locales: [],
+    calco: [],
+    cedula: cedulaVacia(),
   };
 };
+
+export function areaPoligono(pts: Punto[]) {
+  let a = 0;
+  for (let i = 0; i < pts.length; i++) {
+    const p = pts[i], q = pts[(i + 1) % pts.length];
+    a += p.x * q.y - q.x * p.y;
+  }
+  return a / 2;
+}
+
+export function dentroDe(p: Punto, pts: Punto[]) {
+  let c = false;
+  for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
+    const a = pts[i], b = pts[j];
+    if (a.y > p.y !== b.y > p.y && p.x < ((b.x - a.x) * (p.y - a.y)) / (b.y - a.y) + a.x) c = !c;
+  }
+  return c;
+}
+
+export function centroide(pts: Punto[]): Punto {
+  const a = areaPoligono(pts);
+  if (Math.abs(a) < 1e-9) return pts[0];
+  let x = 0, y = 0;
+  for (let i = 0; i < pts.length; i++) {
+    const p = pts[i], q = pts[(i + 1) % pts.length];
+    const c = p.x * q.y - q.x * p.y;
+    x += (p.x + q.x) * c;
+    y += (p.y + q.y) * c;
+  }
+  return { x: x / (6 * a), y: y / (6 * a) };
+}
+
+// Las cedulas truncan a dos decimales, no redondean.
+export const truncar = (v: number) => Math.floor(v * 100 + 1e-6) / 100;

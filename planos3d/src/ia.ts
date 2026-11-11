@@ -1,9 +1,13 @@
-import { ALTO, Fondo, GROSOR, Hueco, Muro, Plano, largo, limitarPos, nuevoHueco, nuevoId, ordenar, proyectar } from './modelo';
+import { claveDeTexto } from './cedula';
+import {
+  ALTO, Fondo, GROSOR, Hueco, Local, Muro, Plano, cedulaVacia, largo, limitarPos, nuevoHueco, nuevoId, ordenar, proyectar,
+} from './modelo';
 
 type Lectura = {
   muros: { x1: number; y1: number; x2: number; y2: number; grosor: number }[];
   huecos: { tipo: 'puerta' | 'ventana'; x: number; y: number; ancho: number }[];
   escala: { x1: number; y1: number; x2: number; y2: number; metros: number } | null;
+  locales?: { nombre: string; x: number; y: number }[];
   notas: string;
 };
 
@@ -76,7 +80,12 @@ export function aplicarLectura(lectura: Lectura, fondo: Fondo): Plano {
     huecos.push({ ...base, ancho: Math.round(ancho * 100) / 100, pos: limitarPos(t, ancho, largo(mejor)) });
   }
 
-  return { muros, huecos, fondo: { ...fondo, ppm, calibrado } };
+  // Los rotulos de cada local se guardan para armar la cedula.
+  const locales: Local[] = (lectura.locales ?? []).map((l) => ({
+    id: nuevoId(), clave: claveDeTexto(l.nombre), nivel: 'PB' as const, punto: { x: m(l.x), y: m(l.y) },
+  })).filter((l) => l.clave);
+
+  return { muros, huecos, fondo: { ...fondo, ppm, calibrado }, locales, calco: [], cedula: cedulaVacia() };
 }
 
 export async function analizarPlano(fondo: Fondo): Promise<{ plano: Plano; notas: string; conEscala: boolean }> {

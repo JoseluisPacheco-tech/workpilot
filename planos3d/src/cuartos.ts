@@ -1,6 +1,29 @@
-import { Muro, Punto, dist, proyectar } from './modelo';
+import { GROSOR, Muro, Punto, areaPoligono, centroide, dist, proyectar } from './modelo';
 
-export type Cuarto = { puntos: Punto[]; area: number; centro: Punto };
+// puntos y area siguen los ejes de los muros; interior y util descuentan el
+// grosor de los muros, que es como se mide el area util en una cedula.
+export type Cuarto = { puntos: Punto[]; area: number; centro: Punto; interior: Punto[]; util: number };
+
+// Mete cada lado medio grosor de muro hacia adentro del recinto.
+function caraInterior(pts: Punto[], muros: Muro[]): Punto[] {
+  const n = pts.length;
+  const lados = pts.map((p, i) => {
+    const q = pts[(i + 1) % n];
+    const L = dist(p, q) || 1;
+    const medio = { x: (p.x + q.x) / 2, y: (p.y + q.y) / 2 };
+    const muro = muros.find((m) => proyectar(medio, m.a, m.b).d < 0.07);
+    const g = (muro?.grosor ?? GROSOR) / 2;
+    const nx = (-(q.y - p.y) / L) * g, ny = ((q.x - p.x) / L) * g;
+    return { a: { x: p.x + nx, y: p.y + ny }, d: { x: (q.x - p.x) / L, y: (q.y - p.y) / L } };
+  });
+  return pts.map((_, i) => {
+    const l1 = lados[(i - 1 + n) % n], l2 = lados[i];
+    const cruz = l1.d.x * l2.d.y - l1.d.y * l2.d.x;
+    if (Math.abs(cruz) < 1e-6) return l2.a;
+    const t = ((l2.a.x - l1.a.x) * l2.d.y - (l2.a.y - l1.a.y) * l2.d.x) / cruz;
+    return { x: l1.a.x + l1.d.x * t, y: l1.a.y + l1.d.y * t };
+  });
+}
 
 const TOL = 0.06;
 
@@ -86,17 +109,16 @@ export function detectarCuartos(muros: Muro[]): Cuarto[] {
         v = w;
       }
       const pts = cara.map((i) => nodos[i]);
-      let area = 0, cx = 0, cy = 0;
-      for (let i = 0; i < pts.length; i++) {
-        const p = pts[i], q = pts[(i + 1) % pts.length];
-        const c = p.x * q.y - q.x * p.y;
-        area += c;
-        cx += (p.x + q.x) * c;
-        cy += (p.y + q.y) * c;
-      }
-      area /= 2;
+      const area = areaPoligono(pts);
       // La cara exterior sale con area negativa; se descarta.
-      if (area > 0.3) cuartos.push({ puntos: pts, area, centro: { x: cx / (6 * area), y: cy / (6 * area) } });
+      if (area > 0.3) {
+        const interior = caraInterior(pts, muros);
+        const util = areaPoligono(interior);
+        cuartos.push({
+          puntos: pts, area, centro: centroide(pts),
+          interior: util > 0.05 ? interior : pts, util: util > 0.05 ? util : area,
+        });
+      }
     }
   }
   return cuartos;
